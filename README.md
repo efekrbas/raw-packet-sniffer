@@ -1,96 +1,96 @@
 # Raw Packet Sniffer
 
-Python'un yerleşik `socket` ve `struct` modülleriyle yazılmış, eğitim amaçlı temel bir Linux paket yakalayıcısı. Haricî bir paket yakalama kütüphanesi (Scapy, Npcap vb.) kullanmaz.
+An educational packet sniffer for Linux, written with Python's built-in socket and struct modules. It does not use external packet-capture libraries such as Scapy or Npcap.
 
-Araç, Ethernet çerçevelerini yakalar ve IPv4 paketlerinde IP, TCP ve UDP başlıklarını ayrıştırır. TCP/UDP yüklerini (payload) yazdırılabilir ASCII ise metin olarak, değilse hexadecimal biçimde gösterir.
+The program captures Ethernet frames, parses IPv4, TCP, and UDP headers, and displays TCP/UDP payloads as readable ASCII text when possible or as hexadecimal data otherwise.
 
-> Yalnızca size ait veya açıkça yetkili olduğunuz ağ ve sistemlerde kullanın. Paket payload'ları oturum bilgileri ve diğer hassas veriler içerebilir.
+> Use this tool only on networks and systems that you own or are explicitly authorized to inspect. Packet payloads can contain session data and other sensitive information.
 
-## Gereksinimler
+## Requirements
 
-- Linux (Ubuntu gibi)
+- Linux, such as Ubuntu
 - Python 3
-- Ham soket açma yetkisi: `root` ya da `CAP_NET_RAW`
+- Permission to open raw sockets: root or the CAP_NET_RAW capability
 
-Kod, Linux'a özgü `AF_PACKET` soket ailesini kullandığı için Windows ve macOS'ta bu haliyle çalışmaz.
+The program uses Linux-specific AF_PACKET sockets, so it does not run on Windows or macOS without a different capture implementation.
 
-## Çalıştırma
+## Run
 
-Önce ağ arayüzünüzü belirleyin:
+Find the name of your network interface:
 
-```bash
+~~~bash
 ip link
-```
+~~~
 
-Ardından yakalayıcıyı seçtiğiniz arayüzle başlatın:
+Start the sniffer on the selected interface:
 
-```bash
+~~~bash
 sudo python3 sniffer.py enp0s3
-```
+~~~
 
-Arayüz adı bilgisayara göre değişebilir: `enp0s3`, `eth0`, `wlan0` gibi. Arayüz adı verilmezse program erişebildiği tüm arayüzleri dinlemeyi dener:
+The interface name varies by computer; common examples are enp0s3, eth0, and wlan0. If no interface is supplied, the program attempts to listen on all available interfaces:
 
-```bash
+~~~bash
 sudo python3 sniffer.py
-```
+~~~
 
-Yakalamayı durdurmak için `Ctrl+C` kullanın.
+Press Ctrl+C to stop capturing packets.
 
-## Yakalanan bilgiler
+## Captured information
 
-Her Ethernet çerçevesi için:
+For every Ethernet frame:
 
-- Hedef ve kaynak MAC adresi
-- EtherType (`IPv4`, `ARP`, `IPv6` vb.)
+- Destination and source MAC addresses
+- EtherType, such as IPv4, ARP, or IPv6
 
-IPv4 paketleri için:
+For IPv4 packets:
 
-- Kaynak ve hedef IP adresi
-- IP protokol numarası ve adı (`ICMP`, `TCP`, `UDP`)
-- IP başlığının bayt aralığı
+- Source and destination IP addresses
+- IP protocol number and name, such as ICMP, TCP, or UDP
+- Byte range of the IP header
 
-TCP veya UDP paketleri için:
+For TCP or UDP packets:
 
-- Kaynak port
-- Hedef port
-- Uygulama verisi (payload)
+- Source port
+- Destination port
+- Application payload
 
-## Kısa denemeler
+## Quick experiments
 
-Şifresiz HTTP isteğini görmek için, yakalayıcı çalışırken başka bir terminalde şunu deneyin:
+To observe an unencrypted HTTP request, run the sniffer and then use another terminal:
 
-```bash
+~~~bash
 curl http://neverssl.com/
-```
+~~~
 
-Hedef portu `80` olan TCP paketlerinde `GET / HTTP/1.1` gibi HTTP isteği satırları ASCII olarak görünebilir. Bir tarayıcı HTTP'yi HTTPS'e yükseltirse içerik şifreli olur ve okunabilir HTTP metni görülmez.
+TCP packets sent to destination port 80 may contain readable request lines such as GET / HTTP/1.1. If your browser automatically upgrades HTTP to HTTPS, the content will be encrypted and readable HTTP text will not be available.
 
-ICMP trafiğini görmek için:
+To observe ICMP traffic:
 
-```bash
+~~~bash
 ping 1.1.1.1
-```
+~~~
 
-Çıktıda `IP Protokol: ICMP (1)` görünür. Bu örnek ICMP başlığını ayrıca ayrıştırmaz; ICMP başlığı ve veri payload olarak gösterilir.
+The output will show IP Protocol: ICMP (1). This example does not separately parse the ICMP header, so its header and data are displayed as payload.
 
-## Nasıl çalışır?
+## How it works
 
-`AF_PACKET` + `SOCK_RAW` Linux çekirdeğinden Ethernet düzeyindeki ham çerçeveleri alır. Ethernet başlığı ilk 14 bayttır:
+AF_PACKET with SOCK_RAW receives raw Ethernet frames from the Linux kernel. The Ethernet header occupies the first 14 bytes:
 
-| Bayt aralığı | Alan |
+| Byte range | Field |
 | --- | --- |
-| 0-5 | Hedef MAC |
-| 6-11 | Kaynak MAC |
+| 0-5 | Destination MAC |
+| 6-11 | Source MAC |
 | 12-13 | EtherType |
 
-EtherType `0x0800` olduğunda IPv4 başlığı Ethernet başlığının hemen ardından başlar. `struct.unpack()` ikili başlık alanlarını Python sayılarına ve bayt dizilerine dönüştürür; `socket.inet_ntoa()` dört ham IP baytını `192.168.1.1` gibi okunabilir bir IPv4 adresine çevirir.
+When the EtherType is 0x0800, the IPv4 header begins immediately after the Ethernet header. struct.unpack() converts binary header fields into Python integers and byte strings, while socket.inet_ntoa() converts four raw IP bytes into a readable IPv4 address such as 192.168.1.1.
 
-IPv4'te IHL alanı IP başlığının değişken uzunluğunu belirtir. TCP başlığı IP başlığının bitiminde başlar ve kendi Data Offset alanına göre biter; UDP başlığı ise sabit 8 bayttır. Bu konumlardan sonra kalan baytlar payload olarak ele alınır.
+The IPv4 IHL field defines the variable IP header length. The TCP header begins at the end of the IP header and has its own Data Offset field; the UDP header is always 8 bytes. The bytes following these headers are treated as payload.
 
-## Sınırlamalar
+## Limitations
 
-- Linux dışındaki işletim sistemleri için farklı bir yakalama altyapısı gerekir.
-- VLAN etiketli Ethernet çerçeveleri için ek ayrıştırma uygulanmamıştır.
-- Paketler tek tek gösterilir; TCP akış birleştirmesi, sıralama veya yeniden iletim temizleme yapılmaz.
-- Şifreli HTTPS/TLS trafiğinin payload'ı okunabilir HTTP içeriği sunmaz.
-- Bu araç yalnızca temel paket yapısını öğrenmek içindir; üretim amaçlı paket analizi için Wireshark veya tcpdump daha uygundur.
+- A different capture implementation is required on non-Linux operating systems.
+- VLAN-tagged Ethernet frames are not parsed.
+- Packets are displayed independently; the program does not reassemble, order, or deduplicate TCP streams.
+- Encrypted HTTPS/TLS payloads cannot reveal readable HTTP content.
+- This tool is intended for learning packet structure. Use Wireshark or tcpdump for production packet analysis.

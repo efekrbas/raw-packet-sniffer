@@ -24,7 +24,7 @@ def mac_address(raw_mac):
 
 
 def hexdump(data, width=16):
-    """Veriyi 16 baytlık satırlar halinde hexadecimal gösterir."""
+    """Return data as hexadecimal rows of the requested width."""
     lines = []
 
     for offset in range(0, len(data), width):
@@ -37,11 +37,11 @@ def hexdump(data, width=16):
 
 def print_payload(payload):
     """
-    Payload yalnızca yazdırılabilir ASCII karakterleri ve satır sonlarını
-    içeriyorsa metin olarak, aksi durumda hexadecimal olarak gösterilir.
+    Display the payload as text when it contains printable ASCII and line
+    breaks only; otherwise, display it as hexadecimal.
     """
     if not payload:
-        print("Payload:          Yok")
+        print("Payload:          None")
         return
 
     is_ascii_text = all(
@@ -50,7 +50,7 @@ def print_payload(payload):
     )
 
     print("-" * 60)
-    print(f"Payload boyutu:   {len(payload)} bayt")
+    print(f"Payload length:   {len(payload)} bytes")
 
     if is_ascii_text:
         print("Payload (ASCII):")
@@ -73,24 +73,24 @@ def parse_ethernet_header(packet):
         "destination_mac": mac_address(destination),
         "source_mac": mac_address(source),
         "eth_type": eth_type,
-        "protocol": ETHERTYPES.get(eth_type, "Bilinmeyen / Diğer"),
+        "protocol": ETHERTYPES.get(eth_type, "Unknown / Other"),
     }
 
 
 def parse_ipv4_header(packet):
     """
-    Ethernet başlığı 0-13. baytlardadır.
-    IPv4 başlığı 14. bayttan başlar.
+    The Ethernet header occupies bytes 0 through 13.
+    The IPv4 header begins at byte 14.
 
-    IHL alanı IP başlığı uzunluğunu 32-bit kelime sayısı olarak verir:
-    IHL=5 -> 5 * 4 = 20 bayt.
+    The IHL field specifies the IP header length in 32-bit words:
+    IHL=5 means 5 * 4 = 20 bytes.
 
-    Bu nedenle IP başlığı:
-      başlangıç: 14
-      bitiş:     14 + (IHL * 4)
+    Therefore, the IP header:
+      starts at: 14
+      ends at:   14 + (IHL * 4)
 
-    socket.inet_ntoa(), b'\\xc0\\xa8\\x01\\x01' gibi 4 ham baytı
-    '192.168.1.1' biçimindeki okunabilir IPv4 adresine çevirir.
+    socket.inet_ntoa() converts four raw bytes, such as
+    b'\xc0\xa8\x01\x01', into a readable IPv4 address such as 192.168.1.1.
     """
     ip_start = ETHERNET_HEADER_LENGTH
 
@@ -122,8 +122,7 @@ def parse_ipv4_header(packet):
     if total_length < ip_header_length:
         return None
 
-    # IPv4 toplam uzunluğu IP başlığını da içerir.
-    # Yakalanan paketin sonunu aşmamak için min() kullanılır.
+    # IPv4 total length includes its header. Do not read beyond the capture.
     ip_packet_end = min(len(packet), ip_start + total_length)
     fragment_offset = flags_and_fragment & 0x1FFF
 
@@ -131,7 +130,7 @@ def parse_ipv4_header(packet):
         "source_ip": socket.inet_ntoa(source_raw),
         "destination_ip": socket.inet_ntoa(destination_raw),
         "protocol_number": protocol_number,
-        "protocol": IP_PROTOCOLS.get(protocol_number, "Bilinmeyen / Diğer"),
+        "protocol": IP_PROTOCOLS.get(protocol_number, "Unknown / Other"),
         "header_start": ip_start,
         "header_end": ip_header_end,
         "header_length": ip_header_length,
@@ -142,9 +141,9 @@ def parse_ipv4_header(packet):
 
 def parse_tcp_header(packet, tcp_start, ip_packet_end):
     """
-    TCP başlığı IP başlığının bittiği yerde başlar.
-    İlk 20 bayt TCP'nin sabit başlık bölümüdür; Data Offset alanı gerçek
-    TCP başlık uzunluğunu belirtir.
+    The TCP header starts immediately after the IP header.
+    Its first 20 bytes are fixed; the Data Offset field gives the actual
+    TCP header length.
     """
     if ip_packet_end < tcp_start + 20:
         return None
@@ -171,8 +170,8 @@ def parse_tcp_header(packet, tcp_start, ip_packet_end):
 
 def parse_udp_header(packet, udp_start, ip_packet_end):
     """
-    UDP başlığı sabit 8 bayttır:
-    kaynak port (2), hedef port (2), uzunluk (2), checksum (2).
+    The UDP header is always 8 bytes:
+    source port (2), destination port (2), length (2), and checksum (2).
     """
     if ip_packet_end < udp_start + 8:
         return None
@@ -185,7 +184,7 @@ def parse_udp_header(packet, udp_start, ip_packet_end):
     if udp_length < 8:
         return None
 
-    # UDP uzunluğu, UDP başlığı + UDP payload'ını kapsar.
+    # UDP length includes its header and its payload.
     udp_end = min(ip_packet_end, udp_start + udp_length)
 
     return {
@@ -207,9 +206,9 @@ def main():
     if len(sys.argv) > 1:
         interface = sys.argv[1]
         sniffer.bind((interface, 0))
-        print(f"{interface} dinleniyor. Çıkmak için Ctrl+C.")
+        print(f"Listening on {interface}. Press Ctrl+C to stop.")
     else:
-        print("Tüm erişilebilir arayüzler dinleniyor. Çıkmak için Ctrl+C.")
+        print("Listening on all available interfaces. Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -220,46 +219,46 @@ def main():
                 continue
 
             print("\n" + "=" * 60)
-            print(f"Arayüz:          {address[0]}")
-            print(f"Paket boyutu:    {len(packet)} bayt")
-            print(f"Hedef MAC:       {ethernet['destination_mac']}")
-            print(f"Kaynak MAC:      {ethernet['source_mac']}")
-            print(f"EthType:         0x{ethernet['eth_type']:04x}")
-            print(f"Protokol:        {ethernet['protocol']}")
+            print(f"Interface:        {address[0]}")
+            print(f"Packet length:    {len(packet)} bytes")
+            print(f"Destination MAC:  {ethernet['destination_mac']}")
+            print(f"Source MAC:       {ethernet['source_mac']}")
+            print(f"EtherType:        0x{ethernet['eth_type']:04x}")
+            print(f"Protocol:         {ethernet['protocol']}")
 
             if ethernet["eth_type"] != 0x0800:
                 continue
 
             ipv4 = parse_ipv4_header(packet)
             if ipv4 is None:
-                print("IPv4 başlığı geçersiz veya eksik.")
+                print("Invalid or incomplete IPv4 header.")
                 continue
 
             print("-" * 60)
-            print(f"Kaynak IP:       {ipv4['source_ip']}")
-            print(f"Hedef IP:        {ipv4['destination_ip']}")
-            print(f"IP Protokol:     {ipv4['protocol']} ({ipv4['protocol_number']})")
-            print(f"IP başlığı:      bayt {ipv4['header_start']}–{ipv4['header_end'] - 1}")
+            print(f"Source IP:        {ipv4['source_ip']}")
+            print(f"Destination IP:   {ipv4['destination_ip']}")
+            print(f"IP protocol:      {ipv4['protocol']} ({ipv4['protocol_number']})")
+            print(f"IP header bytes:  {ipv4['header_start']}-{ipv4['header_end'] - 1}")
 
             transport_start = ipv4["header_end"]
             payload_start = transport_start
             payload_end = ipv4["packet_end"]
 
-            # İlk olmayan IP parçalarında TCP/UDP başlığı bulunmayabilir.
+            # Non-initial IP fragments may not contain a TCP or UDP header.
             if ipv4["fragment_offset"] != 0:
-                print("Not: IP fragmenti; TCP/UDP başlığı ayrıştırılmadı.")
+                print("Note: IP fragment; TCP/UDP header was not parsed.")
 
             elif ipv4["protocol_number"] == 6:
                 tcp = parse_tcp_header(packet, transport_start, ipv4["packet_end"])
 
                 if tcp is None:
-                    print("TCP başlığı geçersiz veya eksik.")
+                    print("Invalid or incomplete TCP header.")
                     continue
 
                 print("-" * 60)
-                print(f"Taşıma Protokolü: TCP")
-                print(f"Kaynak Port:     {tcp['source_port']}")
-                print(f"Hedef Port:      {tcp['destination_port']}")
+                print("Transport protocol: TCP")
+                print(f"Source port:      {tcp['source_port']}")
+                print(f"Destination port: {tcp['destination_port']}")
 
                 payload_start = tcp["payload_start"]
                 payload_end = tcp["payload_end"]
@@ -268,13 +267,13 @@ def main():
                 udp = parse_udp_header(packet, transport_start, ipv4["packet_end"])
 
                 if udp is None:
-                    print("UDP başlığı geçersiz veya eksik.")
+                    print("Invalid or incomplete UDP header.")
                     continue
 
                 print("-" * 60)
-                print(f"Taşıma Protokolü: UDP")
-                print(f"Kaynak Port:     {udp['source_port']}")
-                print(f"Hedef Port:      {udp['destination_port']}")
+                print("Transport protocol: UDP")
+                print(f"Source port:      {udp['source_port']}")
+                print(f"Destination port: {udp['destination_port']}")
 
                 payload_start = udp["payload_start"]
                 payload_end = udp["payload_end"]
@@ -283,7 +282,7 @@ def main():
             print_payload(payload)
 
     except KeyboardInterrupt:
-        print("\nPaket yakalama durduruldu.")
+        print("\nPacket capture stopped.")
     finally:
         sniffer.close()
 
